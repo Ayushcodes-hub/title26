@@ -61,7 +61,7 @@ with out_path.open("w", encoding="utf-8") as out:
 
             # Strip the leading "§ N." and the heading if they repeat
             body = re.sub(r"^\W*§?\s*\[?\s*\d+[A-Za-z]*\.?\]?\s*", "", body, count=1)
-            if heading and body.startswith(heading):
+            if heading and body.startswith(heading) and not heading.lower().startswith(("repealed","renumbered")):
                 body = body[len(heading):].strip()
 
             low_h, low_b = heading.lower(), body.lower()
