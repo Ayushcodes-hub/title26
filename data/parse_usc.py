@@ -10,6 +10,8 @@ def local(tag):
     return tag.split("}")[-1] if isinstance(tag, str) else ""
 
 def clean_text(el):
+    if el is None:
+        return ""
     parts = []
     def walk(node):
         if local(node.tag) in SKIP_TAGS:
@@ -32,8 +34,9 @@ out_path.parent.mkdir(parents=True, exist_ok=True)
 today = datetime.date.today().isoformat()
 
 seen = set()
-stats = {"written": 0, "skipped_nested": 0, "skipped_bad_number": 0,
-         "skipped_short": 0, "skipped_duplicate": 0, "repealed": 0}
+stats = {"written": 0, "in_code": 0, "repealed": 0, "renumbered": 0,
+         "skipped_nested": 0, "skipped_bad_number": 0,
+         "skipped_short": 0, "skipped_duplicate": 0}
 
 with out_path.open("w", encoding="utf-8") as out:
     for xml_file in sorted(src.rglob("*.xml")):
@@ -45,21 +48,31 @@ with out_path.open("w", encoding="utf-8") as out:
 
             num_el = sec.find("{*}num")
             head_el = sec.find("{*}heading")
-            num = clean_text(num_el).replace("§", "").strip().rstrip(".").strip() if num_el is not None else ""
+
+            # Repealed and renumbered sections use brackets, e.g. "[ 4"
+            raw_num = clean_text(num_el)
+            num = re.sub(r"[\[\]§.\s]", "", raw_num)
             if not SECTION_NUM.match(num):
                 stats["skipped_bad_number"] += 1
                 continue
 
-            heading = clean_text(head_el) if head_el is not None else ""
-            full = clean_text(sec)
-            body = full
-            prefix = f"§ {num}."
-            if body.startswith(prefix):
-                body = body[len(prefix):].strip()
+            heading = clean_text(head_el)
+            body = clean_text(sec)
+
+            # Strip the leading "§ N." and the heading if they repeat
+            body = re.sub(r"^\W*§?\s*\[?\s*\d+[A-Za-z]*\.?\]?\s*", "", body, count=1)
             if heading and body.startswith(heading):
                 body = body[len(heading):].strip()
 
-            if len(body) < 40:
+            low_h, low_b = heading.lower(), body.lower()
+            if low_h.startswith("repealed") or low_b.startswith("repealed"):
+                status = "repealed"
+            elif low_h.startswith("renumbered") or low_b.startswith("renumbered"):
+                status = "renumbered"
+            else:
+                status = "in_code"
+
+            if status == "in_code" and len(body) < 40:
                 stats["skipped_short"] += 1
                 continue
 
@@ -68,11 +81,6 @@ with out_path.open("w", encoding="utf-8") as out:
                 stats["skipped_duplicate"] += 1
                 continue
             seen.add(citation)
-
-            repealed = "repealed" in heading.lower() or body.lower().startswith("repealed")
-            status = "repealed" if repealed else "in_code"
-            if repealed:
-                stats["repealed"] += 1
 
             record = {
                 "citation": citation,
@@ -87,6 +95,7 @@ with out_path.open("w", encoding="utf-8") as out:
             }
             out.write(json.dumps(record, ensure_ascii=False) + "\n")
             stats["written"] += 1
+            stats[status] += 1
 
 print("Results:", stats)
 print(f"Output: {out_path}")
