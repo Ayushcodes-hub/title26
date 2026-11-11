@@ -52,7 +52,6 @@ with out_path.open("w", encoding="utf-8") as out:
 
             heading = clean_text(head_el) if head_el is not None else ""
             full = clean_text(sec)
-            # remove the leading "§ N. Heading" that repeats in the body
             body = full
             prefix = f"§ {num}."
             if body.startswith(prefix):
